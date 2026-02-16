@@ -1,0 +1,150 @@
+-- ============================================================
+-- V7_12: MongoDB 监控面板模板 (10条)
+-- 覆盖: 连接 / 操作 / 内存 / 复制 / 存储
+-- ============================================================
+
+INSERT IGNORE INTO prom_panel_template
+    (id, name, description, category, sub_category, exporter_type,
+     chart_type, promql, unit, unit_format,
+     default_width, default_height, thresholds, options, tags, sort_order, created_at)
+VALUES
+
+-- ===================== 连接 (2) =====================
+
+('pt-mongo-01',
+ '当前连接数',
+ 'MongoDB 当前活跃连接数，接近 maxConns 时新连接将被拒绝',
+ 'MongoDB', '连接', 'mongodb_exporter',
+ 'gauge',
+ 'mongodb_connections_current{instance=~"{{instance}}"}',
+ 'count', 'short',
+ 3, 3,
+ '{"warning": 500, "critical": 1000}',
+ '{"decimals": 0, "minValue": 0, "maxValue": 2000, "thresholdMode": "absolute"}',
+ '["mongodb", "connections", "current"]',
+ 1, '2025-01-01 00:00:00'),
+
+('pt-mongo-02',
+ '可用连接数',
+ 'MongoDB 剩余可用连接数，过低时需要关注连接池配置',
+ 'MongoDB', '连接', 'mongodb_exporter',
+ 'stat',
+ 'mongodb_connections_available{instance=~"{{instance}}"}',
+ 'count', 'short',
+ 3, 2,
+ '{"warning": 200, "critical": 50}',
+ '{"colorMode": "background", "textMode": "value", "graphMode": "area", "reduceCalc": "lastNotNull"}',
+ '["mongodb", "connections", "available"]',
+ 2, '2025-01-01 00:00:00'),
+
+-- ===================== 操作 (3) =====================
+
+('pt-mongo-03',
+ '操作速率',
+ 'MongoDB 各操作类型（insert/query/update/delete/command/getmore）的每秒执行数',
+ 'MongoDB', '操作', 'mongodb_exporter',
+ 'line',
+ 'rate(mongodb_op_counters_total{instance=~"{{instance}}"}[5m])',
+ 'ops', 'short',
+ 6, 3,
+ '{}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Ops/s", "fillOpacity": 10}',
+ '["mongodb", "operations", "rate"]',
+ 3, '2025-01-01 00:00:00'),
+
+('pt-mongo-04',
+ 'CRUD 操作分布',
+ 'MongoDB 读写操作（insert/query/update/delete）的速率堆叠视图，直观显示读写比例',
+ 'MongoDB', '操作', 'mongodb_exporter',
+ 'line',
+ 'rate(mongodb_op_counters_total{type=~"insert|query|update|delete",instance=~"{{instance}}"}[5m])',
+ 'ops', 'short',
+ 6, 3,
+ '{}',
+ '{"legend": true, "stacked": true, "decimals": 2, "yAxisLabel": "CRUD Ops/s", "fillOpacity": 50}',
+ '["mongodb", "operations", "crud"]',
+ 4, '2025-01-01 00:00:00'),
+
+('pt-mongo-05',
+ '查询延迟',
+ 'MongoDB 平均操作延迟（微秒），基于 opLatencies 指标，高延迟需排查索引和查询计划',
+ 'MongoDB', '操作', 'mongodb_exporter',
+ 'line',
+ 'rate(mongodb_mongod_op_latencies_latency_total{instance=~"{{instance}}"}[5m]) / rate(mongodb_mongod_op_latencies_ops_total{instance=~"{{instance}}"}[5m])',
+ 's', 'duration',
+ 6, 3,
+ '{"warning": 10000, "critical": 100000}',
+ '{"legend": true, "stacked": false, "decimals": 0, "yAxisLabel": "Latency (us)", "fillOpacity": 10}',
+ '["mongodb", "operations", "latency"]',
+ 5, '2025-01-01 00:00:00'),
+
+-- ===================== 内存 (2) =====================
+
+('pt-mongo-06',
+ '常驻内存 (RSS)',
+ 'MongoDB 进程占用的物理内存（Resident Set Size），持续增长需关注',
+ 'MongoDB', '内存', 'mongodb_exporter',
+ 'line',
+ 'mongodb_memory{type="resident",instance=~"{{instance}}"} * 1024 * 1024',
+ 'bytes', 'bytes_iec',
+ 6, 3,
+ '{"warning": 4294967296, "critical": 8589934592}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Resident Memory", "fillOpacity": 15}',
+ '["mongodb", "memory", "resident"]',
+ 6, '2025-01-01 00:00:00'),
+
+('pt-mongo-07',
+ '虚拟内存',
+ 'MongoDB 进程的虚拟内存映射大小，过大说明内存映射文件过多',
+ 'MongoDB', '内存', 'mongodb_exporter',
+ 'line',
+ 'mongodb_memory{type="virtual",instance=~"{{instance}}"} * 1024 * 1024',
+ 'bytes', 'bytes_iec',
+ 6, 3,
+ '{"warning": 8589934592, "critical": 17179869184}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Virtual Memory", "fillOpacity": 15}',
+ '["mongodb", "memory", "virtual"]',
+ 7, '2025-01-01 00:00:00'),
+
+-- ===================== 复制 (2) =====================
+
+('pt-mongo-08',
+ 'Oplog 窗口',
+ '复制集 Oplog 可覆盖的时间窗口（秒），过小会导致从节点无法追赶',
+ 'MongoDB', '复制', 'mongodb_exporter',
+ 'stat',
+ 'mongodb_mongod_replset_oplog_tail_timestamp{instance=~"{{instance}}"} - mongodb_mongod_replset_oplog_head_timestamp{instance=~"{{instance}}"}',
+ 's', 'duration',
+ 3, 2,
+ '{"warning": 3600, "critical": 1800}',
+ '{"colorMode": "background", "textMode": "value", "graphMode": "area", "reduceCalc": "lastNotNull"}',
+ '["mongodb", "replication", "oplog"]',
+ 8, '2025-01-01 00:00:00'),
+
+('pt-mongo-09',
+ '复制延迟',
+ '从节点相对于主节点的复制延迟时间，延迟过大影响读一致性',
+ 'MongoDB', '复制', 'mongodb_exporter',
+ 'gauge',
+ 'mongodb_mongod_replset_member_replication_lag{instance=~"{{instance}}"}',
+ 's', 'duration',
+ 3, 3,
+ '{"warning": 5, "critical": 30}',
+ '{"decimals": 1, "minValue": 0, "maxValue": 60, "thresholdMode": "absolute"}',
+ '["mongodb", "replication", "lag"]',
+ 9, '2025-01-01 00:00:00'),
+
+-- ===================== 存储 (1) =====================
+
+('pt-mongo-10',
+ '数据库数据+索引大小',
+ '各数据库的数据文件大小与索引文件大小之和，按 DB 名称分组展示',
+ 'MongoDB', '存储', 'mongodb_exporter',
+ 'bar',
+ 'sum by (db) (mongodb_dbstats_dataSize{instance=~"{{instance}}"} + mongodb_dbstats_indexSize{instance=~"{{instance}}"})',
+ 'bytes', 'bytes_iec',
+ 6, 3,
+ '{"warning": 10737418240, "critical": 53687091200}',
+ '{"legend": true, "orientation": "horizontal", "showValue": true, "decimals": 2}',
+ '["mongodb", "storage", "size"]',
+ 10, '2025-01-01 00:00:00');

@@ -1,0 +1,120 @@
+-- ============================================================
+-- V7_14: RabbitMQ 监控面板模板 (8条)
+-- 覆盖: 队列 / 连接 / 节点
+-- ============================================================
+
+INSERT IGNORE INTO prom_panel_template
+    (id, name, description, category, sub_category, exporter_type,
+     chart_type, promql, unit, unit_format,
+     default_width, default_height, thresholds, options, tags, sort_order, created_at)
+VALUES
+
+-- ===================== 队列 (4) =====================
+
+('pt-rmq-01',
+ '队列消息数',
+ '各队列中待消费的消息数量，持续积压说明消费者处理能力不足',
+ 'RabbitMQ', '队列', 'rabbitmq_exporter',
+ 'line',
+ 'rabbitmq_queue_messages{instance=~"{{instance}}",queue=~"{{queue}}"}',
+ 'count', 'short',
+ 6, 3,
+ '{"warning": 1000, "critical": 10000}',
+ '{"legend": true, "stacked": false, "decimals": 0, "yAxisLabel": "Messages", "fillOpacity": 15}',
+ '["rabbitmq", "queue", "messages"]',
+ 1, '2025-01-01 00:00:00'),
+
+('pt-rmq-02',
+ '队列消费者数',
+ '各队列上注册的消费者数量，为 0 表示队列无消费者将持续积压',
+ 'RabbitMQ', '队列', 'rabbitmq_exporter',
+ 'bar',
+ 'rabbitmq_queue_consumers{instance=~"{{instance}}",queue=~"{{queue}}"}',
+ 'count', 'short',
+ 6, 3,
+ '{"warning": 0, "critical": 0}',
+ '{"legend": true, "orientation": "horizontal", "showValue": true, "decimals": 0}',
+ '["rabbitmq", "queue", "consumers"]',
+ 2, '2025-01-01 00:00:00'),
+
+('pt-rmq-03',
+ '消息发布速率',
+ '每秒发布到队列的消息数，反映生产者发送频率',
+ 'RabbitMQ', '队列', 'rabbitmq_exporter',
+ 'line',
+ 'sum by (queue) (rate(rabbitmq_queue_messages_published_total{instance=~"{{instance}}",queue=~"{{queue}}"}[5m]))',
+ 'ops', 'short',
+ 6, 3,
+ '{}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Published/s", "fillOpacity": 10}',
+ '["rabbitmq", "queue", "publish"]',
+ 3, '2025-01-01 00:00:00'),
+
+('pt-rmq-04',
+ '消息确认速率',
+ '每秒被消费者确认（ack）的消息数，ack 速率持续低于 publish 速率会导致积压',
+ 'RabbitMQ', '队列', 'rabbitmq_exporter',
+ 'line',
+ 'sum by (queue) (rate(rabbitmq_queue_messages_acked_total{instance=~"{{instance}}",queue=~"{{queue}}"}[5m]))',
+ 'ops', 'short',
+ 6, 3,
+ '{}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Acked/s", "fillOpacity": 10}',
+ '["rabbitmq", "queue", "ack"]',
+ 4, '2025-01-01 00:00:00'),
+
+-- ===================== 连接 (2) =====================
+
+('pt-rmq-05',
+ '连接数',
+ 'RabbitMQ 当前建立的 AMQP 连接总数',
+ 'RabbitMQ', '连接', 'rabbitmq_exporter',
+ 'stat',
+ 'rabbitmq_connections{instance=~"{{instance}}"}',
+ 'count', 'short',
+ 3, 2,
+ '{"warning": 500, "critical": 1000}',
+ '{"colorMode": "background", "textMode": "value", "graphMode": "area", "reduceCalc": "lastNotNull"}',
+ '["rabbitmq", "connections"]',
+ 5, '2025-01-01 00:00:00'),
+
+('pt-rmq-06',
+ '通道数',
+ 'RabbitMQ 当前打开的 Channel 总数，每个 Channel 消耗内存资源',
+ 'RabbitMQ', '连接', 'rabbitmq_exporter',
+ 'stat',
+ 'rabbitmq_channels{instance=~"{{instance}}"}',
+ 'count', 'short',
+ 3, 2,
+ '{"warning": 1000, "critical": 5000}',
+ '{"colorMode": "background", "textMode": "value", "graphMode": "area", "reduceCalc": "lastNotNull"}',
+ '["rabbitmq", "channels"]',
+ 6, '2025-01-01 00:00:00'),
+
+-- ===================== 节点 (2) =====================
+
+('pt-rmq-07',
+ '节点内存使用量',
+ 'RabbitMQ 各节点进程的内存使用量，超过 high_watermark 将触发流控阻塞生产者',
+ 'RabbitMQ', '节点', 'rabbitmq_exporter',
+ 'line',
+ 'rabbitmq_node_mem_used{instance=~"{{instance}}"}',
+ 'bytes', 'bytes_iec',
+ 6, 3,
+ '{"warning": 1073741824, "critical": 2147483648}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Memory Used", "fillOpacity": 15}',
+ '["rabbitmq", "node", "memory"]',
+ 7, '2025-01-01 00:00:00'),
+
+('pt-rmq-08',
+ '节点文件描述符使用率',
+ 'RabbitMQ 节点已使用文件描述符占总可用 FD 的百分比，耗尽会导致无法接受新连接',
+ 'RabbitMQ', '节点', 'rabbitmq_exporter',
+ 'gauge',
+ 'rabbitmq_node_fd_used{instance=~"{{instance}}"} / rabbitmq_node_fd_total{instance=~"{{instance}}"} * 100',
+ '%', 'percent',
+ 3, 3,
+ '{"warning": 70, "critical": 90}',
+ '{"decimals": 1, "minValue": 0, "maxValue": 100, "thresholdMode": "percentage"}',
+ '["rabbitmq", "node", "fd"]',
+ 8, '2025-01-01 00:00:00');

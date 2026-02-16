@@ -1,0 +1,150 @@
+-- ============================================================
+-- V7_13: Elasticsearch 监控面板模板 (10条)
+-- 覆盖: 集群 / 索引 / 搜索 / JVM / 传输
+-- ============================================================
+
+INSERT IGNORE INTO prom_panel_template
+    (id, name, description, category, sub_category, exporter_type,
+     chart_type, promql, unit, unit_format,
+     default_width, default_height, thresholds, options, tags, sort_order, created_at)
+VALUES
+
+-- ===================== 集群 (3) =====================
+
+('pt-es-01',
+ '集群健康状态',
+ 'Elasticsearch 集群健康状态（green=1, yellow=2, red=3），非 green 需要立即排查',
+ 'Elasticsearch', '集群', 'elasticsearch_exporter',
+ 'stat',
+ 'elasticsearch_cluster_health_status{color="green",instance=~"{{instance}}"} * 1 + elasticsearch_cluster_health_status{color="yellow",instance=~"{{instance}}"} * 2 + elasticsearch_cluster_health_status{color="red",instance=~"{{instance}}"} * 3',
+ '', 'none',
+ 3, 2,
+ '{"warning": 2, "critical": 3}',
+ '{"colorMode": "background", "textMode": "value", "graphMode": "none", "reduceCalc": "lastNotNull", "valueMapping": [{"value": 1, "text": "Green", "color": "#73BF69"}, {"value": 2, "text": "Yellow", "color": "#FF9830"}, {"value": 3, "text": "Red", "color": "#F2495C"}]}',
+ '["elasticsearch", "cluster", "health"]',
+ 1, '2025-01-01 00:00:00'),
+
+('pt-es-02',
+ '集群节点数',
+ 'Elasticsearch 集群中的节点总数，节点数异常变化说明有节点离线',
+ 'Elasticsearch', '集群', 'elasticsearch_exporter',
+ 'stat',
+ 'elasticsearch_cluster_health_number_of_nodes{instance=~"{{instance}}"}',
+ 'count', 'short',
+ 3, 2,
+ '{}',
+ '{"colorMode": "value", "textMode": "value", "graphMode": "area", "reduceCalc": "lastNotNull"}',
+ '["elasticsearch", "cluster", "nodes"]',
+ 2, '2025-01-01 00:00:00'),
+
+('pt-es-03',
+ '分片状态概览',
+ '集群中各类分片数量（active、relocating、initializing、unassigned），unassigned > 0 需处理',
+ 'Elasticsearch', '集群', 'elasticsearch_exporter',
+ 'stat',
+ 'elasticsearch_cluster_health_active_shards{instance=~"{{instance}}"} + elasticsearch_cluster_health_relocating_shards{instance=~"{{instance}}"} + elasticsearch_cluster_health_initializing_shards{instance=~"{{instance}}"} + elasticsearch_cluster_health_unassigned_shards{instance=~"{{instance}}"}',
+ 'count', 'short',
+ 3, 2,
+ '{}',
+ '{"colorMode": "value", "textMode": "value", "graphMode": "none", "reduceCalc": "lastNotNull"}',
+ '["elasticsearch", "cluster", "shards"]',
+ 3, '2025-01-01 00:00:00'),
+
+-- ===================== 索引 (2) =====================
+
+('pt-es-04',
+ '索引速率',
+ '每秒索引文档数，衡量写入吞吐量，突然下降可能存在写入瓶颈',
+ 'Elasticsearch', '索引', 'elasticsearch_exporter',
+ 'line',
+ 'sum by (instance) (rate(elasticsearch_indices_indexing_index_total{instance=~"{{instance}}"}[5m]))',
+ 'ops', 'short',
+ 6, 3,
+ '{}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Docs/s", "fillOpacity": 15}',
+ '["elasticsearch", "indexing", "rate"]',
+ 4, '2025-01-01 00:00:00'),
+
+('pt-es-05',
+ '索引延迟',
+ '索引操作的平均耗时，高延迟需检查 Mapping、Refresh 间隔或磁盘 IO',
+ 'Elasticsearch', '索引', 'elasticsearch_exporter',
+ 'line',
+ 'rate(elasticsearch_indices_indexing_index_time_seconds_total{instance=~"{{instance}}"}[5m]) / rate(elasticsearch_indices_indexing_index_total{instance=~"{{instance}}"}[5m])',
+ 's', 'duration',
+ 6, 3,
+ '{"warning": 0.05, "critical": 0.2}',
+ '{"legend": true, "stacked": false, "decimals": 4, "yAxisLabel": "Index Latency (s)", "fillOpacity": 10}',
+ '["elasticsearch", "indexing", "latency"]',
+ 5, '2025-01-01 00:00:00'),
+
+-- ===================== 搜索 (2) =====================
+
+('pt-es-06',
+ '搜索速率',
+ '每秒搜索查询数，衡量读取吞吐量',
+ 'Elasticsearch', '搜索', 'elasticsearch_exporter',
+ 'line',
+ 'sum by (instance) (rate(elasticsearch_indices_search_query_total{instance=~"{{instance}}"}[5m]))',
+ 'ops', 'short',
+ 6, 3,
+ '{}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Queries/s", "fillOpacity": 15}',
+ '["elasticsearch", "search", "rate"]',
+ 6, '2025-01-01 00:00:00'),
+
+('pt-es-07',
+ '搜索延迟',
+ '搜索查询的平均耗时，高延迟需优化查询 DSL 或增加副本分片',
+ 'Elasticsearch', '搜索', 'elasticsearch_exporter',
+ 'line',
+ 'rate(elasticsearch_indices_search_query_time_seconds{instance=~"{{instance}}"}[5m]) / rate(elasticsearch_indices_search_query_total{instance=~"{{instance}}"}[5m])',
+ 's', 'duration',
+ 6, 3,
+ '{"warning": 0.1, "critical": 0.5}',
+ '{"legend": true, "stacked": false, "decimals": 4, "yAxisLabel": "Search Latency (s)", "fillOpacity": 10}',
+ '["elasticsearch", "search", "latency"]',
+ 7, '2025-01-01 00:00:00'),
+
+-- ===================== JVM (2) =====================
+
+('pt-es-08',
+ 'JVM 堆内存使用量',
+ 'Elasticsearch 各节点 JVM 堆内存使用量，接近上限会触发频繁 GC',
+ 'Elasticsearch', 'JVM', 'elasticsearch_exporter',
+ 'line',
+ 'elasticsearch_jvm_memory_used_bytes{area="heap",instance=~"{{instance}}"}',
+ 'bytes', 'bytes_iec',
+ 6, 3,
+ '{"warning": 21474836480, "critical": 27917287424}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "JVM Heap", "fillOpacity": 15}',
+ '["elasticsearch", "jvm", "heap"]',
+ 8, '2025-01-01 00:00:00'),
+
+('pt-es-09',
+ 'GC 耗时',
+ '各节点 JVM GC 的耗时速率（old + young），持续高值说明堆压力大',
+ 'Elasticsearch', 'JVM', 'elasticsearch_exporter',
+ 'line',
+ 'rate(elasticsearch_jvm_gc_collection_seconds_count{instance=~"{{instance}}"}[5m])',
+ 'ops', 'short',
+ 6, 3,
+ '{"warning": 5, "critical": 20}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "GC/s", "fillOpacity": 10}',
+ '["elasticsearch", "jvm", "gc"]',
+ 9, '2025-01-01 00:00:00'),
+
+-- ===================== 传输 (1) =====================
+
+('pt-es-10',
+ '传输层连接与收发',
+ '节点间传输层打开的连接数及收发字节速率，反映集群内部通信负载',
+ 'Elasticsearch', '传输', 'elasticsearch_exporter',
+ 'line',
+ 'rate(elasticsearch_transport_rx_size_bytes_total{instance=~"{{instance}}"}[5m]) + rate(elasticsearch_transport_tx_size_bytes_total{instance=~"{{instance}}"}[5m])',
+ 'Bps', 'bytes_iec',
+ 6, 3,
+ '{"warning": 104857600, "critical": 524288000}',
+ '{"legend": true, "stacked": false, "decimals": 2, "yAxisLabel": "Transport IO/s", "fillOpacity": 15}',
+ '["elasticsearch", "transport", "io"]',
+ 10, '2025-01-01 00:00:00');
