@@ -36,4 +36,10 @@ public class PromCluster {
      */
     @TableField(exist = false)
     private java.util.List<PromClusterNode> nodes;
+
+    /**
+     * Transient field: node count for list view, not persisted in DB.
+     */
+    @TableField(exist = false)
+    private Long nodeCount;
 }

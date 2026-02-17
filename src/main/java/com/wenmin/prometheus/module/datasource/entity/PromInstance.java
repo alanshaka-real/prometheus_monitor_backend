@@ -44,6 +44,10 @@ public class PromInstance {
 
     private LocalDateTime updatedAt;
 
+    @Version
+    @TableField("opt_version")
+    private Integer optVersion;
+
     @TableLogic
     private Integer deleted;
 }

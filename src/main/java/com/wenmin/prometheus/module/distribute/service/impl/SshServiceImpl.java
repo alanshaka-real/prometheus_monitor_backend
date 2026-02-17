@@ -8,6 +8,7 @@ import net.schmizz.sshj.common.IOUtils;
 import net.schmizz.sshj.connection.channel.direct.Session;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import net.schmizz.sshj.xfer.FileSystemFile;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -19,6 +20,9 @@ public class SshServiceImpl implements SshService {
 
     private static final int CONNECT_TIMEOUT = 10000;
     private static final int COMMAND_TIMEOUT = 30;
+
+    @Value("${distribute.ssh.strict-host-key-checking:false}")
+    private boolean strictHostKeyChecking;
 
     @Override
     public boolean testConnection(String host, int port, String username, String password) {
@@ -95,7 +99,12 @@ public class SshServiceImpl implements SshService {
 
     public SSHClient createClient(String host, int port, String username, String password) throws Exception {
         SSHClient ssh = new SSHClient();
-        ssh.addHostKeyVerifier(new PromiscuousVerifier());
+        if (!strictHostKeyChecking) {
+            log.warn("SSH strict host key checking is DISABLED for {}. Enable via distribute.ssh.strict-host-key-checking=true in production.", host);
+            ssh.addHostKeyVerifier(new PromiscuousVerifier());
+        } else {
+            ssh.loadKnownHosts();
+        }
         ssh.setConnectTimeout(CONNECT_TIMEOUT);
         ssh.connect(host, port);
         ssh.authPassword(username, password);

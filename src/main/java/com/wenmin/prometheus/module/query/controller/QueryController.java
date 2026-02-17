@@ -55,8 +55,10 @@ public class QueryController {
 
     @Operation(summary = "获取查询历史")
     @GetMapping("/query/history")
-    public R<Object> listHistory() {
-        return R.ok(queryService.listHistory());
+    public R<Object> listHistory(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return R.ok(queryService.listHistory(page, pageSize));
     }
 
     @Operation(summary = "保存查询历史")

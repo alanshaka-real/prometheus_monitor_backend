@@ -52,6 +52,9 @@ public class PromExporter {
 
     private LocalDateTime updatedAt;
 
+    @Version
+    private Integer version;
+
     @TableLogic
     private Integer deleted;
 }

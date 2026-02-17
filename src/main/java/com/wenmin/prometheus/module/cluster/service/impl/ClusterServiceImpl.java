@@ -13,6 +13,7 @@ import com.wenmin.prometheus.module.cluster.service.ClusterService;
 import com.wenmin.prometheus.module.cluster.service.PrometheusMetricsFetcher;
 import com.wenmin.prometheus.module.datasource.entity.PromInstance;
 import com.wenmin.prometheus.module.datasource.mapper.PromInstanceMapper;
+import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -32,6 +36,9 @@ public class ClusterServiceImpl implements ClusterService {
     private final PromClusterNodeMapper nodeMapper;
     private final PromInstanceMapper instanceMapper;
     private final PrometheusMetricsFetcher metricsFetcher;
+
+    @Resource(name = "serviceDetectExecutor")
+    private Executor asyncExecutor;
 
     // ==================== Resolve Prometheus URL ====================
 
@@ -54,13 +61,26 @@ public class ClusterServiceImpl implements ClusterService {
         wrapper.orderByDesc(PromCluster::getCreatedAt);
         List<PromCluster> list = clusterMapper.selectList(wrapper);
 
-        // Enrich with node count
-        for (PromCluster cluster : list) {
-            LambdaQueryWrapper<PromClusterNode> nodeWrapper = new LambdaQueryWrapper<>();
-            nodeWrapper.eq(PromClusterNode::getClusterId, cluster.getId());
-            long nodeCount = nodeMapper.selectCount(nodeWrapper);
-            cluster.setNodes(null); // Don't load full nodes for list
-            // Use a transient approach: embed count in the response
+        // Batch query node counts for all clusters (fixes N+1)
+        if (!list.isEmpty()) {
+            LambdaQueryWrapper<PromClusterNode> countWrapper = new LambdaQueryWrapper<>();
+            countWrapper.select(PromClusterNode::getClusterId);
+            countWrapper.groupBy(PromClusterNode::getClusterId);
+            List<Map<String, Object>> countMaps = nodeMapper.selectMaps(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<PromClusterNode>()
+                    .select("cluster_id, count(*) as node_count")
+                    .groupBy("cluster_id")
+            );
+            Map<String, Long> nodeCountMap = new HashMap<>();
+            for (Map<String, Object> row : countMaps) {
+                String clusterId = String.valueOf(row.get("cluster_id"));
+                long count = ((Number) row.get("node_count")).longValue();
+                nodeCountMap.put(clusterId, count);
+            }
+            for (PromCluster cluster : list) {
+                cluster.setNodes(null); // Don't load full nodes for list
+                cluster.setNodeCount(nodeCountMap.getOrDefault(cluster.getId(), 0L));
+            }
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -169,17 +189,68 @@ public class ClusterServiceImpl implements ClusterService {
             clusters = clusterMapper.selectList(null);
         }
 
-        // Create Prometheus topology nodes — check reachability
-        Set<String> promUrls = new HashSet<>();
+        // Collect unique Prometheus URLs and map cluster -> promUrl
+        Map<String, String> clusterPromUrls = new LinkedHashMap<>();
+        Set<String> uniquePromUrls = new LinkedHashSet<>();
         for (PromCluster cluster : clusters) {
             String promUrl = resolvePrometheusUrl(cluster);
-            if (StringUtils.hasText(promUrl) && promUrls.add(promUrl)) {
-                String promStatus;
+            if (StringUtils.hasText(promUrl)) {
+                clusterPromUrls.put(cluster.getId(), promUrl);
+                uniquePromUrls.add(promUrl);
+            }
+        }
+
+        // Parallel: check reachability for all unique Prometheus URLs
+        Map<String, CompletableFuture<Boolean>> reachFutures = new LinkedHashMap<>();
+        for (String promUrl : uniquePromUrls) {
+            reachFutures.put(promUrl, CompletableFuture.supplyAsync(() -> {
                 try {
-                    promStatus = metricsFetcher.isReachable(promUrl) ? "healthy" : "offline";
+                    return metricsFetcher.isReachable(promUrl);
                 } catch (Exception e) {
-                    promStatus = "offline";
+                    return false;
                 }
+            }, asyncExecutor));
+        }
+
+        // Parallel: fetch live metrics for all unique Prometheus URLs
+        Map<String, CompletableFuture<Map<String, NodeMetricsDTO>>> metricsFutures = new LinkedHashMap<>();
+        for (String promUrl : uniquePromUrls) {
+            metricsFutures.put(promUrl, CompletableFuture.supplyAsync(() -> {
+                try {
+                    return metricsFetcher.fetchAllNodeMetrics(promUrl);
+                } catch (Exception e) {
+                    log.warn("Failed to fetch metrics for topology from {}: {}", promUrl, e.getMessage());
+                    return new HashMap<String, NodeMetricsDTO>();
+                }
+            }, asyncExecutor));
+        }
+
+        // Wait for all futures to complete
+        CompletableFuture.allOf(
+            reachFutures.values().toArray(new CompletableFuture[0])
+        ).join();
+        CompletableFuture.allOf(
+            metricsFutures.values().toArray(new CompletableFuture[0])
+        ).join();
+
+        // Collect reachability results
+        Map<String, Boolean> reachResults = new HashMap<>();
+        for (Map.Entry<String, CompletableFuture<Boolean>> entry : reachFutures.entrySet()) {
+            reachResults.put(entry.getKey(), entry.getValue().join());
+        }
+
+        // Collect metrics results
+        Map<String, Map<String, NodeMetricsDTO>> metricsResults = new HashMap<>();
+        for (Map.Entry<String, CompletableFuture<Map<String, NodeMetricsDTO>>> entry : metricsFutures.entrySet()) {
+            metricsResults.put(entry.getKey(), entry.getValue().join());
+        }
+
+        // Create Prometheus topology nodes
+        Set<String> addedPromUrls = new HashSet<>();
+        for (PromCluster cluster : clusters) {
+            String promUrl = clusterPromUrls.get(cluster.getId());
+            if (StringUtils.hasText(promUrl) && addedPromUrls.add(promUrl)) {
+                String promStatus = Boolean.TRUE.equals(reachResults.get(promUrl)) ? "healthy" : "offline";
 
                 Map<String, Object> promNode = new LinkedHashMap<>();
                 String promNodeId = "prom-" + cluster.getId();
@@ -201,17 +272,12 @@ public class ClusterServiceImpl implements ClusterService {
         // Create cluster and node topology entries
         for (PromCluster cluster : clusters) {
             String clusterNodeId = "cluster-" + cluster.getId();
-            String promUrl = resolvePrometheusUrl(cluster);
+            String promUrl = clusterPromUrls.get(cluster.getId());
 
-            // Fetch live metrics for this cluster's nodes
-            Map<String, NodeMetricsDTO> liveMetrics = new HashMap<>();
-            if (StringUtils.hasText(promUrl)) {
-                try {
-                    liveMetrics = metricsFetcher.fetchAllNodeMetrics(promUrl);
-                } catch (Exception e) {
-                    log.warn("Failed to fetch metrics for topology of cluster {}: {}", cluster.getId(), e.getMessage());
-                }
-            }
+            // Use pre-fetched live metrics
+            Map<String, NodeMetricsDTO> liveMetrics = StringUtils.hasText(promUrl)
+                    ? metricsResults.getOrDefault(promUrl, new HashMap<>())
+                    : new HashMap<>();
 
             Map<String, Object> clusterNode = new LinkedHashMap<>();
             clusterNode.put("id", clusterNodeId);

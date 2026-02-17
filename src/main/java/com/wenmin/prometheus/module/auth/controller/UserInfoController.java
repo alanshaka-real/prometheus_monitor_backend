@@ -9,13 +9,14 @@ import com.wenmin.prometheus.module.auth.vo.UserInfoVO;
 import com.wenmin.prometheus.security.SecurityUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "用户信息")
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/prometheus")
 @RequiredArgsConstructor
 public class UserInfoController {
 
@@ -32,7 +33,7 @@ public class UserInfoController {
     @AuditLog(action = "更新", resource = "个人资料")
     public R<UserInfoVO> updateProfile(
             @AuthenticationPrincipal SecurityUser user,
-            @RequestBody UserProfileDTO dto) {
+            @Valid @RequestBody UserProfileDTO dto) {
         return R.ok(authService.updateProfile(user.getUserId(), dto));
     }
 
@@ -41,7 +42,7 @@ public class UserInfoController {
     @AuditLog(action = "修改", resource = "密码")
     public R<Void> changePassword(
             @AuthenticationPrincipal SecurityUser user,
-            @RequestBody ChangePasswordDTO dto) {
+            @Valid @RequestBody ChangePasswordDTO dto) {
         authService.changePassword(user.getUserId(), dto);
         return R.ok();
     }

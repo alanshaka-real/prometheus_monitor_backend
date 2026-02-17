@@ -154,6 +154,19 @@ public class AuthServiceImpl implements AuthService {
         userMapper.updateById(user);
     }
 
+    @Override
+    public String generateNewAccessToken(String userId) {
+        SysUser user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401, "用户不存在");
+        }
+        if ("disabled".equals(user.getStatus())) {
+            throw new BusinessException(403, "账号已被禁用");
+        }
+        List<String> roleNames = getRoleNames(userId);
+        return jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername(), roleNames);
+    }
+
     private List<String> getRoleNames(String userId) {
         List<SysUserRole> userRoles = userRoleMapper.selectList(
                 new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));

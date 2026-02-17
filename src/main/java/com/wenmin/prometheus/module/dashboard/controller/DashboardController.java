@@ -4,6 +4,7 @@ import com.wenmin.prometheus.common.result.R;
 import com.wenmin.prometheus.module.dashboard.entity.PromDashboard;
 import com.wenmin.prometheus.module.dashboard.entity.PromDashboardTemplate;
 import com.wenmin.prometheus.module.dashboard.service.DashboardService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,8 +24,10 @@ public class DashboardController {
     @GetMapping("/dashboards")
     public R<Map<String, Object>> listDashboards(
             @RequestParam(required = false) String tag,
-            @RequestParam(required = false) String keyword) {
-        return R.ok(dashboardService.listDashboards(tag, keyword));
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return R.ok(dashboardService.listDashboards(tag, keyword, page, pageSize));
     }
 
     /**
@@ -39,7 +42,7 @@ public class DashboardController {
      * Create a new dashboard
      */
     @PostMapping("/dashboards")
-    public R<PromDashboard> createDashboard(@RequestBody PromDashboard dashboard) {
+    public R<PromDashboard> createDashboard(@Valid @RequestBody PromDashboard dashboard) {
         return R.ok(dashboardService.create(dashboard));
     }
 
@@ -49,7 +52,7 @@ public class DashboardController {
     @PutMapping("/dashboards/{id}")
     public R<PromDashboard> updateDashboard(
             @PathVariable String id,
-            @RequestBody PromDashboard dashboard) {
+            @Valid @RequestBody PromDashboard dashboard) {
         return R.ok(dashboardService.update(id, dashboard));
     }
 
@@ -69,8 +72,10 @@ public class DashboardController {
     public R<Map<String, Object>> listTemplates(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String exporterType,
-            @RequestParam(required = false) String keyword) {
-        return R.ok(dashboardService.listTemplates(category, exporterType, keyword));
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return R.ok(dashboardService.listTemplates(category, exporterType, keyword, page, pageSize));
     }
 
     /**
@@ -98,10 +103,23 @@ public class DashboardController {
     }
 
     /**
-     * Export a dashboard (returns full dashboard data)
+     * Export a dashboard (returns full dashboard data or Grafana JSON)
      */
     @GetMapping("/dashboards/{id}/export")
-    public R<PromDashboard> exportDashboard(@PathVariable String id) {
+    public R<?> exportDashboard(
+            @PathVariable String id,
+            @RequestParam(required = false) String format) {
+        if ("grafana".equalsIgnoreCase(format)) {
+            return R.ok(dashboardService.exportAsGrafanaJson(id));
+        }
         return R.ok(dashboardService.exportDashboard(id));
+    }
+
+    /**
+     * Import a Grafana JSON dashboard
+     */
+    @PostMapping("/dashboards/import")
+    public R<PromDashboard> importGrafanaJson(@RequestBody Map<String, Object> grafanaJson) {
+        return R.ok(dashboardService.importGrafanaJson(grafanaJson));
     }
 }

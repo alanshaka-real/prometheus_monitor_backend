@@ -40,6 +40,9 @@ public class PromDashboard {
 
     private LocalDateTime updatedAt;
 
+    @Version
+    private Integer version;
+
     @TableLogic
     private Integer deleted;
 }

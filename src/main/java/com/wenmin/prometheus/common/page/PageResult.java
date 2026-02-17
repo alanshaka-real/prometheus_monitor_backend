@@ -1,6 +1,7 @@
 package com.wenmin.prometheus.common.page;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.util.List;
@@ -11,6 +12,24 @@ public class PageResult<T> {
     private long current;
     private long size;
     private long total;
+
+    /** Alias for 'records' - frontend expects 'list' field */
+    @JsonProperty("list")
+    public List<T> getList() {
+        return records;
+    }
+
+    /** Alias for 'current' - frontend uses 'pageNum' */
+    @JsonProperty("pageNum")
+    public long getPageNum() {
+        return current;
+    }
+
+    /** Alias for 'size' - frontend uses 'pageSize' */
+    @JsonProperty("pageSize")
+    public long getPageSize() {
+        return size;
+    }
 
     public static <T> PageResult<T> of(IPage<T> page) {
         PageResult<T> result = new PageResult<>();

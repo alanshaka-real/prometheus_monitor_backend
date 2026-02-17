@@ -11,6 +11,7 @@ import com.wenmin.prometheus.module.permission.vo.RoleVO;
 import com.wenmin.prometheus.module.permission.vo.UserVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,14 +43,14 @@ public class PermissionController {
     @Operation(summary = "创建用户")
     @PostMapping("/users")
     @AuditLog(action = "创建", resource = "用户")
-    public R<UserVO> createUser(@RequestBody UserDTO dto) {
+    public R<UserVO> createUser(@Valid @RequestBody UserDTO dto) {
         return R.ok(permissionService.createUser(dto));
     }
 
     @Operation(summary = "更新用户")
     @PutMapping("/users/{id}")
     @AuditLog(action = "更新", resource = "用户")
-    public R<UserVO> updateUser(@PathVariable String id, @RequestBody UserDTO dto) {
+    public R<UserVO> updateUser(@PathVariable String id, @Valid @RequestBody UserDTO dto) {
         return R.ok(permissionService.updateUser(id, dto));
     }
 
@@ -80,14 +81,14 @@ public class PermissionController {
     @Operation(summary = "创建角色")
     @PostMapping("/roles")
     @AuditLog(action = "创建", resource = "角色")
-    public R<RoleVO> createRole(@RequestBody RoleDTO dto) {
+    public R<RoleVO> createRole(@Valid @RequestBody RoleDTO dto) {
         return R.ok(permissionService.createRole(dto));
     }
 
     @Operation(summary = "更新角色")
     @PutMapping("/roles/{id}")
     @AuditLog(action = "更新", resource = "角色")
-    public R<RoleVO> updateRole(@PathVariable String id, @RequestBody RoleDTO dto) {
+    public R<RoleVO> updateRole(@PathVariable String id, @Valid @RequestBody RoleDTO dto) {
         return R.ok(permissionService.updateRole(id, dto));
     }
 
@@ -110,14 +111,14 @@ public class PermissionController {
     @Operation(summary = "创建权限")
     @PostMapping("/permissions")
     @AuditLog(action = "创建", resource = "权限")
-    public R<PermissionVO> createPermission(@RequestBody PermissionDTO dto) {
+    public R<PermissionVO> createPermission(@Valid @RequestBody PermissionDTO dto) {
         return R.ok(permissionService.createPermission(dto));
     }
 
     @Operation(summary = "更新权限")
     @PutMapping("/permissions/{id}")
     @AuditLog(action = "更新", resource = "权限")
-    public R<PermissionVO> updatePermission(@PathVariable String id, @RequestBody PermissionDTO dto) {
+    public R<PermissionVO> updatePermission(@PathVariable String id, @Valid @RequestBody PermissionDTO dto) {
         return R.ok(permissionService.updatePermission(id, dto));
     }
 

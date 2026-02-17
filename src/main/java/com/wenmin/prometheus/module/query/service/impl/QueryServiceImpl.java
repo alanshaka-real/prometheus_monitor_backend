@@ -1,6 +1,8 @@
 package com.wenmin.prometheus.module.query.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.wenmin.prometheus.common.exception.BusinessException;
 import com.wenmin.prometheus.module.datasource.entity.PromExporter;
 import com.wenmin.prometheus.module.datasource.entity.PromInstance;
@@ -15,6 +17,7 @@ import com.wenmin.prometheus.module.query.vo.ExporterInstanceVO;
 import com.wenmin.prometheus.module.query.vo.TemplateTreeVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -114,11 +117,17 @@ public class QueryServiceImpl implements QueryService {
     }
 
     @Override
-    public Map<String, Object> listHistory() {
-        List<PromQueryHistory> list = historyMapper.selectList(
-                new LambdaQueryWrapper<PromQueryHistory>()
-                        .orderByDesc(PromQueryHistory::getExecutedAt));
-        return Map.of("list", list, "total", list.size());
+    public Map<String, Object> listHistory(Integer page, Integer pageSize) {
+        LambdaQueryWrapper<PromQueryHistory> wrapper = new LambdaQueryWrapper<PromQueryHistory>()
+                .orderByDesc(PromQueryHistory::getExecutedAt);
+
+        Page<PromQueryHistory> pageObj = new Page<>(page, pageSize);
+        IPage<PromQueryHistory> pageResult = historyMapper.selectPage(pageObj, wrapper);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("list", pageResult.getRecords());
+        result.put("total", pageResult.getTotal());
+        return result;
     }
 
     @Override
@@ -140,6 +149,7 @@ public class QueryServiceImpl implements QueryService {
     }
 
     @Override
+    @Cacheable(value = "promqlTemplateTree")
     public List<TemplateTreeVO> listTemplateTree() {
         List<PromPromqlTemplate> all = templateMapper.selectList(
                 new LambdaQueryWrapper<PromPromqlTemplate>()

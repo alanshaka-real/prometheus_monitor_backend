@@ -11,7 +11,7 @@ public interface AlertService {
 
     // ---- Alert Rules ----
 
-    Map<String, Object> listAlertRules(String status, String severity);
+    Map<String, Object> listAlertRules(String status, String severity, Integer page, Integer pageSize);
 
     PromAlertRule createAlertRule(PromAlertRule rule);
 
@@ -23,7 +23,7 @@ public interface AlertService {
 
     // ---- Alert History ----
 
-    Map<String, Object> listAlertHistory(String severity, String startTime, String endTime);
+    Map<String, Object> listAlertHistory(String severity, String startTime, String endTime, Integer page, Integer pageSize);
 
     void acknowledgeAlert(String id, String remark, String handledBy);
 

@@ -34,5 +34,7 @@ public class PromAlertHistory {
 
     private String remark;
 
+    private Boolean silenced;
+
     private LocalDateTime createdAt;
 }

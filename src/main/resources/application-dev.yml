@@ -9,6 +9,7 @@ spring:
       minimum-idle: 5
       idle-timeout: 300000
       connection-timeout: 30000
+      leak-detection-threshold: 30000
 
   mail:
     host: smtp.example.com
@@ -21,15 +22,51 @@ spring:
           ssl:
             enable: true
 
+# NOTE: The following JWT secret and encryption key are for DEVELOPMENT ONLY.
+# Do NOT use these values in production. Set environment variables instead.
 jwt:
-  secret: prometheus-monitor-jwt-secret-key-2024-very-long-and-secure
+  secret: prometheus-monitor-jwt-secret-key-2024-very-long-and-secure  # DEV ONLY
   access-token-expire: 7200000
   refresh-token-expire: 604800000
 
 prometheus:
   default-url: http://localhost:9090
 
+cors:
+  allowed-origins: http://localhost:3006,http://localhost:3007,http://192.168.0.21:3006,http://192.168.0.21:3007
+
 distribute:
   software-path: /home/jeffding/wenmin/prometheus_monitor/prometheus_soft
-  encryption-key: prometheus-monitor-aes256-secret!
+  encryption-key: prometheus-monitor-aes256-secret!  # DEV ONLY
   github-token:   # 可选，配置后 API 限额从 60/h 提升到 5000/h
+  task-timeout-minutes: 30  # 部署任务超时时间（分钟）
+  ssh:
+    strict-host-key-checking: false  # DEV ONLY - 开发环境关闭 SSH 主机密钥验证
+
+exporter:
+  status-check:
+    enabled: true
+    interval-ms: 300000       # 状态同步间隔（毫秒），默认 5 分钟
+    connect-timeout-ms: 3000  # HTTP 连接超时（毫秒）
+    read-timeout-ms: 3000     # HTTP 读取超时（毫秒）
+
+alert:
+  evaluation:
+    enabled: true
+    interval-ms: 60000        # 告警评估间隔（毫秒），默认 60 秒
+  validation:
+    remote-enabled: true      # 是否启用远程 PromQL 验证
+
+instance:
+  health-check:
+    enabled: true
+    interval-ms: 300000       # 实例健康检查间隔（毫秒），默认 5 分钟
+
+metadata:
+  sync:
+    enabled: true
+    interval-ms: 1800000      # 元数据同步间隔（毫秒），默认 30 分钟
+
+cluster:
+  topology:
+    push-interval-ms: 30000   # 集群拓扑 WebSocket 推送间隔（毫秒），默认 30 秒

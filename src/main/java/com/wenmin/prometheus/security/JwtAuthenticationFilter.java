@@ -3,6 +3,7 @@ package com.wenmin.prometheus.security;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -27,10 +28,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String token = request.getHeader("Authorization");
+        String token = resolveToken(request);
 
         if (StringUtils.hasText(token)) {
-            // Frontend sends token directly without Bearer prefix
             DecodedJWT jwt = jwtTokenProvider.verifyToken(token);
             if (jwt != null) {
                 String userId = jwtTokenProvider.getUserId(jwt);
@@ -49,5 +49,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Resolve token from Authorization header first, then fallback to httpOnly cookie.
+     */
+    private String resolveToken(HttpServletRequest request) {
+        // 1. Try Authorization header (supports both raw token and "Bearer xxx" format)
+        String headerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(headerToken)) {
+            if (headerToken.startsWith("Bearer ")) {
+                return headerToken.substring(7);
+            }
+            return headerToken;
+        }
+
+        // 2. Fallback to httpOnly cookie
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if ("access_token".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+
+        return null;
     }
 }

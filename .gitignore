@@ -27,3 +27,4 @@ target/
 ### Logs ###
 logs/
 *.log
+CLAUDE.md

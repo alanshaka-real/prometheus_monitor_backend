@@ -4,12 +4,15 @@ import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
 import java.util.List;
 
+@Slf4j
 @Component
 public class JwtTokenProvider {
 
@@ -21,6 +24,18 @@ public class JwtTokenProvider {
 
     @Value("${jwt.refresh-token-expire}")
     private long refreshTokenExpire;
+
+    @Value("${spring.profiles.active:dev}")
+    private String activeProfile;
+
+    @PostConstruct
+    public void validateSecret() {
+        if ("prod".equals(activeProfile) && (secret == null || secret.isBlank())) {
+            throw new IllegalStateException(
+                "JWT_SECRET environment variable must be set in production. " +
+                "Set it via: export JWT_SECRET=<your-secure-secret>");
+        }
+    }
 
     public String generateAccessToken(String userId, String username, List<String> roles) {
         return JWT.create()

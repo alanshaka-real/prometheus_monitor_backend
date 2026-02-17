@@ -8,7 +8,7 @@ import java.util.Map;
 
 public interface DashboardService {
 
-    Map<String, Object> listDashboards(String tag, String keyword);
+    Map<String, Object> listDashboards(String tag, String keyword, Integer page, Integer pageSize);
 
     PromDashboard getById(String id);
 
@@ -18,7 +18,7 @@ public interface DashboardService {
 
     void delete(String id);
 
-    Map<String, Object> listTemplates(String category, String exporterType, String keyword);
+    Map<String, Object> listTemplates(String category, String exporterType, String keyword, Integer page, Integer pageSize);
 
     PromDashboardTemplate getTemplateById(String id);
 
@@ -27,4 +27,8 @@ public interface DashboardService {
     PromDashboard importTemplate(String templateId);
 
     PromDashboard exportDashboard(String id);
+
+    PromDashboard importGrafanaJson(Map<String, Object> grafanaJson);
+
+    Map<String, Object> exportAsGrafanaJson(String id);
 }

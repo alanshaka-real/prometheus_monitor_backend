@@ -11,6 +11,7 @@ import com.wenmin.prometheus.module.datasource.vo.*;
 import com.wenmin.prometheus.module.distribute.dto.PrometheusConfigDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,8 +32,10 @@ public class DatasourceController {
     @GetMapping("/instances")
     public R<Map<String, Object>> listInstances(
             @RequestParam(required = false) String group,
-            @RequestParam(required = false) String status) {
-        return R.ok(datasourceService.listInstances(group, status));
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return R.ok(datasourceService.listInstances(group, status, page, pageSize));
     }
 
     @Operation(summary = "获取Prometheus实例详情")
@@ -43,13 +46,13 @@ public class DatasourceController {
 
     @Operation(summary = "创建Prometheus实例")
     @PostMapping("/instances")
-    public R<PromInstance> createInstance(@RequestBody PromInstance instance) {
+    public R<PromInstance> createInstance(@Valid @RequestBody PromInstance instance) {
         return R.ok(datasourceService.createInstance(instance));
     }
 
     @Operation(summary = "更新Prometheus实例")
     @PutMapping("/instances/{id}")
-    public R<PromInstance> updateInstance(@PathVariable String id, @RequestBody PromInstance instance) {
+    public R<PromInstance> updateInstance(@PathVariable String id, @Valid @RequestBody PromInstance instance) {
         return R.ok(datasourceService.updateInstance(id, instance));
     }
 
@@ -78,7 +81,7 @@ public class DatasourceController {
     @PostMapping("/instances/{id}/config/push")
     public R<Map<String, Object>> pushInstanceConfig(
             @PathVariable String id,
-            @RequestBody PrometheusConfigDTO config) {
+            @Valid @RequestBody PrometheusConfigDTO config) {
         return R.ok(datasourceService.pushInstanceConfig(id, config));
     }
 
@@ -118,19 +121,21 @@ public class DatasourceController {
     @GetMapping("/exporters")
     public R<Map<String, Object>> listExporters(
             @RequestParam(required = false) String type,
-            @RequestParam(required = false) String instanceId) {
-        return R.ok(datasourceService.listExporters(type, instanceId));
+            @RequestParam(required = false) String instanceId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return R.ok(datasourceService.listExporters(type, instanceId, page, pageSize));
     }
 
     @Operation(summary = "创建Exporter")
     @PostMapping("/exporters")
-    public R<PromExporter> createExporter(@RequestBody PromExporter exporter) {
+    public R<PromExporter> createExporter(@Valid @RequestBody PromExporter exporter) {
         return R.ok(datasourceService.createExporter(exporter));
     }
 
     @Operation(summary = "更新Exporter")
     @PutMapping("/exporters/{id}")
-    public R<PromExporter> updateExporter(@PathVariable String id, @RequestBody PromExporter exporter) {
+    public R<PromExporter> updateExporter(@PathVariable String id, @Valid @RequestBody PromExporter exporter) {
         return R.ok(datasourceService.updateExporter(id, exporter));
     }
 
@@ -157,13 +162,13 @@ public class DatasourceController {
 
     @Operation(summary = "批量导入Exporter")
     @PostMapping("/exporters/batch")
-    public R<BatchCreateResultVO> batchCreateExporters(@RequestBody BatchCreateExporterDTO dto) {
+    public R<BatchCreateResultVO> batchCreateExporters(@Valid @RequestBody BatchCreateExporterDTO dto) {
         return R.ok(datasourceService.batchCreateExporters(dto));
     }
 
     @Operation(summary = "自动探测服务")
     @PostMapping("/exporters/detect")
-    public R<ServiceDetectResultVO> detectServices(@RequestBody ServiceDetectRequestDTO request) {
+    public R<ServiceDetectResultVO> detectServices(@Valid @RequestBody ServiceDetectRequestDTO request) {
         return R.ok(datasourceService.detectServices(request));
     }
 
@@ -173,7 +178,7 @@ public class DatasourceController {
     @PostMapping("/exporters/{id}/link-machine")
     public R<Void> linkExporterMachine(
             @PathVariable String id,
-            @RequestBody ExporterLinkMachineDTO dto) {
+            @Valid @RequestBody ExporterLinkMachineDTO dto) {
         datasourceService.linkExporterMachine(id, dto);
         return R.ok();
     }

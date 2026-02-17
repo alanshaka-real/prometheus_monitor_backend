@@ -16,7 +16,7 @@ public interface QueryService {
 
     Map<String, Object> getLabelValues(String label, String instanceId);
 
-    Map<String, Object> listHistory();
+    Map<String, Object> listHistory(Integer page, Integer pageSize);
 
     void saveHistory(String query, Double duration, Integer resultCount, String userId);
 

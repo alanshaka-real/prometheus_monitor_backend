@@ -14,6 +14,7 @@ import com.wenmin.prometheus.module.distribute.vo.SoftwareDownloadVO;
 import com.wenmin.prometheus.module.distribute.vo.SoftwareUploadVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -43,7 +44,7 @@ public class DistributeController {
     @Operation(summary = "新增目标机器")
     @PostMapping("/machines")
     @AuditLog(action = "创建", resource = "分发机器")
-    public R<PromDistributeMachine> createMachine(@RequestBody PromDistributeMachine machine) {
+    public R<PromDistributeMachine> createMachine(@Valid @RequestBody PromDistributeMachine machine) {
         return R.ok(distributeService.createMachine(machine));
     }
 
@@ -51,7 +52,7 @@ public class DistributeController {
     @PutMapping("/machines/{id}")
     @AuditLog(action = "修改", resource = "分发机器")
     public R<PromDistributeMachine> updateMachine(@PathVariable String id,
-                                                   @RequestBody PromDistributeMachine machine) {
+                                                   @Valid @RequestBody PromDistributeMachine machine) {
         return R.ok(distributeService.updateMachine(id, machine));
     }
 
@@ -193,7 +194,7 @@ public class DistributeController {
 
     @Operation(summary = "验证 Prometheus 配置并预览 YAML")
     @PostMapping("/prometheus/validate-config")
-    public R<Map<String, Object>> validatePrometheusConfig(@RequestBody PrometheusConfigDTO config) {
+    public R<Map<String, Object>> validatePrometheusConfig(@Valid @RequestBody PrometheusConfigDTO config) {
         String installDir = config.getInstallDir() != null && !config.getInstallDir().isBlank()
                 ? config.getInstallDir() : "~/prometheus";
         String yaml = PrometheusYamlGenerator.generate(config);

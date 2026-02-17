@@ -35,6 +35,9 @@ public class DistributeServiceImpl implements DistributeService {
     @Value("${distribute.encryption-key}")
     private String encryptionKey;
 
+    @Value("${distribute.ssh.strict-host-key-checking:false}")
+    private boolean strictHostKeyChecking;
+
     // ==================== Machine Management ====================
 
     @Override
@@ -141,7 +144,12 @@ public class DistributeServiceImpl implements DistributeService {
     public boolean testSshConnection(String ip, Integer port, String username, String password) {
         try {
             SSHClient ssh = new SSHClient();
-            ssh.addHostKeyVerifier(new PromiscuousVerifier());
+            if (!strictHostKeyChecking) {
+                log.warn("SSH strict host key checking is DISABLED for {}. Enable via distribute.ssh.strict-host-key-checking=true in production.", ip);
+                ssh.addHostKeyVerifier(new PromiscuousVerifier());
+            } else {
+                ssh.loadKnownHosts();
+            }
             ssh.setConnectTimeout(10000);
             ssh.connect(ip, port != null ? port : 22);
             ssh.authPassword(username, password);
@@ -339,7 +347,12 @@ public class DistributeServiceImpl implements DistributeService {
         MachineDetectVO vo = new MachineDetectVO();
         try {
             SSHClient ssh = new SSHClient();
-            ssh.addHostKeyVerifier(new PromiscuousVerifier());
+            if (!strictHostKeyChecking) {
+                log.warn("SSH strict host key checking is DISABLED for {}. Enable via distribute.ssh.strict-host-key-checking=true in production.", host);
+                ssh.addHostKeyVerifier(new PromiscuousVerifier());
+            } else {
+                ssh.loadKnownHosts();
+            }
             ssh.setConnectTimeout(10000);
             ssh.connect(host, port);
             ssh.authPassword(username, password);

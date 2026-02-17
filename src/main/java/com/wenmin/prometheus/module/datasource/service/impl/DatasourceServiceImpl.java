@@ -1,6 +1,8 @@
 package com.wenmin.prometheus.module.datasource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenmin.prometheus.common.exception.BusinessException;
 import com.wenmin.prometheus.module.datasource.dto.BatchCreateExporterDTO;
@@ -36,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -63,6 +66,9 @@ public class DatasourceServiceImpl implements DatasourceService {
     @Value("${distribute.encryption-key}")
     private String encryptionKey;
 
+    @Value("${distribute.ssh.strict-host-key-checking:false}")
+    private boolean strictHostKeyChecking;
+
     // 服务标识 → 默认端口
     private static final Map<String, Integer> DETECT_DEFAULT_PORTS = Map.of(
             "node_exporter", 9100, "blackbox_exporter", 9115,
@@ -82,7 +88,7 @@ public class DatasourceServiceImpl implements DatasourceService {
     // ==================== Prometheus Instances ====================
 
     @Override
-    public Map<String, Object> listInstances(String group, String status) {
+    public Map<String, Object> listInstances(String group, String status, Integer page, Integer pageSize) {
         LambdaQueryWrapper<PromInstance> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(group)) {
             wrapper.eq(PromInstance::getGroupName, group);
@@ -92,10 +98,11 @@ public class DatasourceServiceImpl implements DatasourceService {
         }
         wrapper.orderByDesc(PromInstance::getCreatedAt);
 
-        List<PromInstance> list = instanceMapper.selectList(wrapper);
+        Page<PromInstance> pageObj = new Page<>(page, pageSize);
+        IPage<PromInstance> pageResult = instanceMapper.selectPage(pageObj, wrapper);
         Map<String, Object> result = new HashMap<>();
-        result.put("list", list);
-        result.put("total", list.size());
+        result.put("list", pageResult.getRecords());
+        result.put("total", pageResult.getTotal());
         return result;
     }
 
@@ -133,11 +140,20 @@ public class DatasourceServiceImpl implements DatasourceService {
     }
 
     @Override
+    @Transactional
     public void deleteInstance(String id) {
         PromInstance existing = instanceMapper.selectById(id);
         if (existing == null) {
             throw new BusinessException("Prometheus实例不存在");
         }
+        // 级联软删除关联 Exporter
+        LambdaQueryWrapper<PromExporter> exporterWrapper = new LambdaQueryWrapper<>();
+        exporterWrapper.eq(PromExporter::getInstanceId, id);
+        List<PromExporter> exporters = exporterMapper.selectList(exporterWrapper);
+        for (PromExporter exporter : exporters) {
+            exporterMapper.deleteById(exporter.getId());
+        }
+        // 删除实例
         instanceMapper.deleteById(id);
     }
 
@@ -434,7 +450,12 @@ public class DatasourceServiceImpl implements DatasourceService {
         }
         String password = decryptPassword(machine.getSshPassword());
         SSHClient ssh = new SSHClient();
-        ssh.addHostKeyVerifier(new PromiscuousVerifier());
+        if (!strictHostKeyChecking) {
+            log.warn("SSH strict host key checking is DISABLED for {}. Enable via distribute.ssh.strict-host-key-checking=true in production.", machine.getIp());
+            ssh.addHostKeyVerifier(new PromiscuousVerifier());
+        } else {
+            ssh.loadKnownHosts();
+        }
         ssh.setConnectTimeout(10000);
         ssh.connect(machine.getIp(), machine.getSshPort());
         ssh.authPassword(machine.getSshUsername(), password);
@@ -446,6 +467,41 @@ public class DatasourceServiceImpl implements DatasourceService {
             Session.Command cmd = session.exec(command);
             cmd.join(60, TimeUnit.SECONDS);
             return IOUtils.readFully(cmd.getInputStream()).toString();
+        }
+    }
+
+    /**
+     * Execute a command that requires sudo, feeding the password via stdin
+     * instead of embedding it in the command string. This prevents command injection.
+     */
+    private String execCmdWithStdinPassword(SSHClient ssh, String command, String password) throws Exception {
+        try (Session session = ssh.startSession()) {
+            Session.Command cmd = session.exec(command);
+
+            // Feed password via stdin for sudo -S
+            OutputStream stdin = cmd.getOutputStream();
+            stdin.write((password + "\n").getBytes(StandardCharsets.UTF_8));
+            stdin.flush();
+            stdin.close();
+
+            cmd.join(60, TimeUnit.SECONDS);
+
+            String stdout = IOUtils.readFully(cmd.getInputStream()).toString();
+            String stderr = IOUtils.readFully(cmd.getErrorStream()).toString();
+
+            Integer exitCode = cmd.getExitStatus();
+            if (exitCode == null) {
+                throw new RuntimeException("命令执行超时");
+            }
+            if (exitCode != 0) {
+                String cleanStderr = stderr.replaceAll("\\[sudo\\] password for \\w+:", "").trim();
+                String errorMsg = cleanStderr.isEmpty() ? stdout.trim() : cleanStderr;
+                if (errorMsg.isEmpty()) {
+                    errorMsg = "exit code " + exitCode;
+                }
+                throw new RuntimeException("命令执行失败: " + errorMsg);
+            }
+            return stdout;
         }
     }
 
@@ -483,7 +539,7 @@ public class DatasourceServiceImpl implements DatasourceService {
     // ==================== Exporters ====================
 
     @Override
-    public Map<String, Object> listExporters(String type, String instanceId) {
+    public Map<String, Object> listExporters(String type, String instanceId, Integer page, Integer pageSize) {
         LambdaQueryWrapper<PromExporter> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(type)) {
             wrapper.eq(PromExporter::getType, type);
@@ -493,10 +549,11 @@ public class DatasourceServiceImpl implements DatasourceService {
         }
         wrapper.orderByDesc(PromExporter::getCreatedAt);
 
-        List<PromExporter> list = exporterMapper.selectList(wrapper);
+        Page<PromExporter> pageObj = new Page<>(page, pageSize);
+        IPage<PromExporter> pageResult = exporterMapper.selectPage(pageObj, wrapper);
         Map<String, Object> result = new HashMap<>();
-        result.put("list", list);
-        result.put("total", list.size());
+        result.put("list", pageResult.getRecords());
+        result.put("total", pageResult.getTotal());
         return result;
     }
 
@@ -840,10 +897,9 @@ public class DatasourceServiceImpl implements DatasourceService {
             PromDistributeMachine machine = machineMapper.selectById(exporter.getMachineId());
             String password = decryptPassword(machine.getSshPassword());
 
-            // Execute systemctl command with sudo
-            String cmd = String.format("echo '%s' | sudo -S systemctl %s %s 2>&1",
-                    password.replace("'", "'\\''"), action, exporter.getServiceName());
-            output = execCmd(ssh, cmd).trim();
+            // Execute systemctl command with sudo (password via stdin)
+            String cmd = String.format("sudo -S systemctl %s %s 2>&1", action, exporter.getServiceName());
+            output = execCmdWithStdinPassword(ssh, cmd, password).trim();
 
             // Wait briefly for service state to settle
             Thread.sleep(2000);
@@ -1138,34 +1194,26 @@ public class DatasourceServiceImpl implements DatasourceService {
             String serviceName = exporter.getServiceName();
 
             if (StringUtils.hasText(serviceFileContent)) {
-                // Write service file using base64 + sudo cp
+                // Write service file using base64 + sudo cp (password via stdin)
                 String base64Content = Base64.getEncoder().encodeToString(serviceFileContent.getBytes(StandardCharsets.UTF_8));
                 String tmpFile = "/tmp/prom_svc_" + System.currentTimeMillis() + ".service";
-                String writeCmd = String.format(
-                        "echo '%s' | base64 -d > %s && echo '%s' | sudo -S cp %s /etc/systemd/system/%s.service && rm -f %s 2>&1",
-                        base64Content, tmpFile, password.replace("'", "'\\''"), tmpFile, serviceName, tmpFile);
-                output = execCmd(ssh, writeCmd).trim();
+                execCmd(ssh, String.format("echo '%s' | base64 -d > %s", base64Content, tmpFile));
+                output = execCmdWithStdinPassword(ssh, String.format("sudo -S cp %s /etc/systemd/system/%s.service && rm -f %s 2>&1", tmpFile, serviceName, tmpFile), password).trim();
             } else if (StringUtils.hasText(cliFlags)) {
                 // Generate a new service file with updated cli flags
                 String newServiceFile = generateExporterServiceFile(exporter, cliFlags, machine.getSshUsername());
                 String base64Content = Base64.getEncoder().encodeToString(newServiceFile.getBytes(StandardCharsets.UTF_8));
                 String tmpFile = "/tmp/prom_svc_" + System.currentTimeMillis() + ".service";
-                String writeCmd = String.format(
-                        "echo '%s' | base64 -d > %s && echo '%s' | sudo -S cp %s /etc/systemd/system/%s.service && rm -f %s 2>&1",
-                        base64Content, tmpFile, password.replace("'", "'\\''"), tmpFile, serviceName, tmpFile);
-                output = execCmd(ssh, writeCmd).trim();
+                execCmd(ssh, String.format("echo '%s' | base64 -d > %s", base64Content, tmpFile));
+                output = execCmdWithStdinPassword(ssh, String.format("sudo -S cp %s /etc/systemd/system/%s.service && rm -f %s 2>&1", tmpFile, serviceName, tmpFile), password).trim();
             }
 
-            // daemon-reload
-            String reloadCmd = String.format("echo '%s' | sudo -S systemctl daemon-reload 2>&1",
-                    password.replace("'", "'\\''"));
-            output += "\n" + execCmd(ssh, reloadCmd).trim();
+            // daemon-reload (password via stdin)
+            output += "\n" + execCmdWithStdinPassword(ssh, "sudo -S systemctl daemon-reload 2>&1", password).trim();
 
             // Optional restart
             if (restartAfterUpdate) {
-                String restartCmd = String.format("echo '%s' | sudo -S systemctl restart %s 2>&1",
-                        password.replace("'", "'\\''"), serviceName);
-                output += "\n" + execCmd(ssh, restartCmd).trim();
+                output += "\n" + execCmdWithStdinPassword(ssh, String.format("sudo -S systemctl restart %s 2>&1", serviceName), password).trim();
                 Thread.sleep(2000);
 
                 String activeStatus = execCmd(ssh, "systemctl is-active " + serviceName + " 2>/dev/null").trim();

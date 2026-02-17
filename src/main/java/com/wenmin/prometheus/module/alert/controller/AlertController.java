@@ -2,19 +2,26 @@ package com.wenmin.prometheus.module.alert.controller;
 
 import com.wenmin.prometheus.annotation.AuditLog;
 import com.wenmin.prometheus.common.result.R;
+import com.wenmin.prometheus.module.alert.entity.PromAlertHistory;
 import com.wenmin.prometheus.module.alert.entity.PromAlertRule;
 import com.wenmin.prometheus.module.alert.entity.PromNotificationChannel;
 import com.wenmin.prometheus.module.alert.entity.PromSilence;
+import com.wenmin.prometheus.module.alert.mapper.PromAlertHistoryMapper;
 import com.wenmin.prometheus.module.alert.service.AlertService;
 import com.wenmin.prometheus.security.SecurityUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Tag(name = "告警管理")
 @RestController
 @RequestMapping("/api/prometheus")
@@ -22,6 +29,7 @@ import java.util.Map;
 public class AlertController {
 
     private final AlertService alertService;
+    private final PromAlertHistoryMapper alertHistoryMapper;
 
     // ==================== Alert Rules ====================
 
@@ -29,14 +37,16 @@ public class AlertController {
     @GetMapping("/alert/rules")
     public R<Map<String, Object>> listAlertRules(
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String severity) {
-        return R.ok(alertService.listAlertRules(status, severity));
+            @RequestParam(required = false) String severity,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return R.ok(alertService.listAlertRules(status, severity, page, pageSize));
     }
 
     @Operation(summary = "创建告警规则")
     @AuditLog(action = "创建", resource = "告警规则")
     @PostMapping("/alert/rules")
-    public R<PromAlertRule> createAlertRule(@RequestBody PromAlertRule rule) {
+    public R<PromAlertRule> createAlertRule(@Valid @RequestBody PromAlertRule rule) {
         return R.ok(alertService.createAlertRule(rule));
     }
 
@@ -44,7 +54,7 @@ public class AlertController {
     @AuditLog(action = "修改", resource = "告警规则")
     @PutMapping("/alert/rules/{id}")
     public R<PromAlertRule> updateAlertRule(@PathVariable String id,
-                                            @RequestBody PromAlertRule rule) {
+                                            @Valid @RequestBody PromAlertRule rule) {
         return R.ok(alertService.updateAlertRule(id, rule));
     }
 
@@ -72,8 +82,10 @@ public class AlertController {
     public R<Map<String, Object>> listAlertHistory(
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String startTime,
-            @RequestParam(required = false) String endTime) {
-        return R.ok(alertService.listAlertHistory(severity, startTime, endTime));
+            @RequestParam(required = false) String endTime,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return R.ok(alertService.listAlertHistory(severity, startTime, endTime, page, pageSize));
     }
 
     @Operation(summary = "确认告警")
@@ -98,7 +110,7 @@ public class AlertController {
     @Operation(summary = "创建静默规则")
     @AuditLog(action = "创建", resource = "静默规则")
     @PostMapping("/alert/silences")
-    public R<PromSilence> createSilence(@RequestBody PromSilence silence) {
+    public R<PromSilence> createSilence(@Valid @RequestBody PromSilence silence) {
         return R.ok(alertService.createSilence(silence));
     }
 
@@ -122,7 +134,7 @@ public class AlertController {
     @AuditLog(action = "创建", resource = "通知渠道")
     @PostMapping("/alert/notifications")
     public R<PromNotificationChannel> createNotificationChannel(
-            @RequestBody PromNotificationChannel channel) {
+            @Valid @RequestBody PromNotificationChannel channel) {
         return R.ok(alertService.createNotificationChannel(channel));
     }
 
@@ -131,7 +143,7 @@ public class AlertController {
     @PutMapping("/alert/notifications/{id}")
     public R<PromNotificationChannel> updateNotificationChannel(
             @PathVariable String id,
-            @RequestBody PromNotificationChannel channel) {
+            @Valid @RequestBody PromNotificationChannel channel) {
         return R.ok(alertService.updateNotificationChannel(id, channel));
     }
 
@@ -148,6 +160,45 @@ public class AlertController {
     @PostMapping("/alert/notifications/{id}/test")
     public R<Void> testNotificationChannel(@PathVariable String id) {
         alertService.testNotificationChannel(id);
+        return R.ok();
+    }
+
+    // ==================== Alertmanager Webhook ====================
+
+    @Operation(summary = "接收 Alertmanager Webhook")
+    @PostMapping("/alert/webhook")
+    public R<Void> receiveAlertmanagerWebhook(@RequestBody Map<String, Object> payload) {
+        log.info("收到 Alertmanager Webhook 推送");
+        try {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> alerts = (List<Map<String, Object>>) payload.get("alerts");
+            if (alerts == null || alerts.isEmpty()) {
+                return R.ok();
+            }
+
+            for (Map<String, Object> alert : alerts) {
+                PromAlertHistory history = new PromAlertHistory();
+                @SuppressWarnings("unchecked")
+                Map<String, String> labels = (Map<String, String>) alert.get("labels");
+                @SuppressWarnings("unchecked")
+                Map<String, String> annotations = (Map<String, String>) alert.get("annotations");
+
+                history.setAlertName(labels != null ? labels.getOrDefault("alertname", "unknown") : "unknown");
+                history.setSeverity(labels != null ? labels.getOrDefault("severity", "warning") : "warning");
+                history.setStatus((String) alert.getOrDefault("status", "firing"));
+                history.setInstance(labels != null ? labels.getOrDefault("instance", "") : "");
+                history.setValue(annotations != null ? annotations.getOrDefault("value", "") : "");
+                history.setStartsAt(LocalDateTime.now());
+                history.setCreatedAt(LocalDateTime.now());
+                if (annotations != null && annotations.containsKey("description")) {
+                    history.setRemark(annotations.get("description"));
+                }
+                alertHistoryMapper.insert(history);
+            }
+            log.info("Alertmanager Webhook 处理完成，共 {} 条告警", alerts.size());
+        } catch (Exception e) {
+            log.error("处理 Alertmanager Webhook 失败", e);
+        }
         return R.ok();
     }
 }

@@ -7,6 +7,7 @@ import com.wenmin.prometheus.module.cluster.entity.PromClusterNode;
 import com.wenmin.prometheus.module.cluster.service.ClusterService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -54,13 +55,13 @@ public class ClusterController {
 
     @Operation(summary = "创建集群")
     @PostMapping("/clusters")
-    public R<PromCluster> createCluster(@RequestBody ClusterDTO dto) {
+    public R<PromCluster> createCluster(@Valid @RequestBody ClusterDTO dto) {
         return R.ok(clusterService.createCluster(dto));
     }
 
     @Operation(summary = "更新集群")
     @PutMapping("/clusters/{id}")
-    public R<PromCluster> updateCluster(@PathVariable String id, @RequestBody ClusterDTO dto) {
+    public R<PromCluster> updateCluster(@PathVariable String id, @Valid @RequestBody ClusterDTO dto) {
         return R.ok(clusterService.updateCluster(id, dto));
     }
 
@@ -81,7 +82,7 @@ public class ClusterController {
 
     @Operation(summary = "添加节点到集群")
     @PostMapping("/clusters/{id}/nodes")
-    public R<PromClusterNode> addNode(@PathVariable String id, @RequestBody PromClusterNode node) {
+    public R<PromClusterNode> addNode(@PathVariable String id, @Valid @RequestBody PromClusterNode node) {
         return R.ok(clusterService.addNode(id, node));
     }
 

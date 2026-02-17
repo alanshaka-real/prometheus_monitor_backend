@@ -11,4 +11,9 @@ public interface AuthService {
     UserInfoVO getUserInfo(String userId);
     UserInfoVO updateProfile(String userId, UserProfileDTO dto);
     void changePassword(String userId, ChangePasswordDTO dto);
+
+    /**
+     * 根据 userId 生成新的 accessToken（用于 refresh 流程）。
+     */
+    String generateNewAccessToken(String userId);
 }

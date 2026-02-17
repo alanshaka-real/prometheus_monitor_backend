@@ -17,8 +17,11 @@ import com.wenmin.prometheus.module.permission.vo.RoleVO;
 import com.wenmin.prometheus.module.permission.vo.UserVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -143,7 +146,7 @@ public class PermissionServiceImpl implements PermissionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public UserVO updateUser(String id, UserDTO dto) {
         SysUser user = sysUserMapper.selectById(id);
         if (user == null) {
@@ -257,7 +260,7 @@ public class PermissionServiceImpl implements PermissionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public RoleVO updateRole(String id, RoleDTO dto) {
         SysRole role = roleMapper.selectById(id);
         if (role == null) {
@@ -308,6 +311,7 @@ public class PermissionServiceImpl implements PermissionService {
     // ==================== Permissions ====================
 
     @Override
+    @Cacheable(value = "permissionTree")
     public Map<String, Object> listPermissions() {
         List<SysPermission> allPermissions = permissionMapper.selectList(
                 new LambdaQueryWrapper<SysPermission>().orderByAsc(SysPermission::getSortOrder)
@@ -323,6 +327,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "permissionTree", allEntries = true)
     public PermissionVO createPermission(PermissionDTO dto) {
         // Check if permission code already exists
         LambdaQueryWrapper<SysPermission> checkWrapper = new LambdaQueryWrapper<>();
@@ -345,6 +350,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "permissionTree", allEntries = true)
     public PermissionVO updatePermission(String id, PermissionDTO dto) {
         SysPermission permission = permissionMapper.selectById(id);
         if (permission == null) {
@@ -373,6 +379,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "permissionTree", allEntries = true)
     public void deletePermission(String id) {
         SysPermission permission = permissionMapper.selectById(id);
         if (permission == null) {

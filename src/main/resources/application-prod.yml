@@ -9,13 +9,30 @@ spring:
       minimum-idle: 10
 
 jwt:
-  secret: ${JWT_SECRET:prometheus-monitor-jwt-secret-key-prod}
+  secret: ${JWT_SECRET:}
   access-token-expire: 7200000
   refresh-token-expire: 604800000
+
+cors:
+  allowed-origins: https://your-production-domain.com
+
+distribute:
+  encryption-key: ${DISTRIBUTE_ENCRYPTION_KEY:}
+  ssh:
+    strict-host-key-checking: true  # 生产环境开启 SSH 主机密钥验证
 
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+knife4j:
+  production: true
 
 logging:
   level:

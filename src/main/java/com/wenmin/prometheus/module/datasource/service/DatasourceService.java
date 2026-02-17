@@ -15,7 +15,7 @@ public interface DatasourceService {
 
     // ---- Prometheus Instances ----
 
-    Map<String, Object> listInstances(String group, String status);
+    Map<String, Object> listInstances(String group, String status, Integer page, Integer pageSize);
 
     PromInstance getInstanceById(String id);
 
@@ -46,7 +46,7 @@ public interface DatasourceService {
 
     // ---- Exporters ----
 
-    Map<String, Object> listExporters(String type, String instanceId);
+    Map<String, Object> listExporters(String type, String instanceId, Integer page, Integer pageSize);
 
     PromExporter createExporter(PromExporter exporter);
 
